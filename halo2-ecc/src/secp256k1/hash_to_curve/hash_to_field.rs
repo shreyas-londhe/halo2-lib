@@ -2,10 +2,11 @@ use super::expand_message_xmd::expand_message_xmd;
 use crate::{
     bigint::ProperCrtUint,
     fields::FieldChip,
-    secp256k1::{hash_to_curve::util::limbs_le_to_bn, sha256::Sha256Chip, FpChip},
+    secp256k1::{hash_to_curve::util::limbs_le_to_bn, FpChip},
 };
 use halo2_base::{
     gates::{GateInstructions, RangeInstructions},
+    poseidon::hasher::PoseidonHasher,
     utils::BigPrimeField,
     AssignedValue, Context, QuantumCell,
 };
@@ -57,10 +58,10 @@ fn bytes_to_registers<F: BigPrimeField>(
 pub(crate) fn hash_to_field<F: BigPrimeField>(
     ctx: &mut Context<F>,
     fp_chip: &FpChip<'_, F>,
-    sha256_chip: &Sha256Chip<F>,
+    poseidon_hasher: &PoseidonHasher<F, 3, 2>,
     msg_bytes: &[AssignedValue<F>],
 ) -> (ProperCrtUint<F>, ProperCrtUint<F>) {
-    let expanded_msg_bytes = expand_message_xmd(ctx, fp_chip.range, sha256_chip, msg_bytes);
+    let expanded_msg_bytes = expand_message_xmd(ctx, fp_chip.range, poseidon_hasher, msg_bytes);
     assert_eq!(expanded_msg_bytes.len(), 96);
 
     let u1 = bytes_to_registers(ctx, fp_chip, &expanded_msg_bytes[0..48]);

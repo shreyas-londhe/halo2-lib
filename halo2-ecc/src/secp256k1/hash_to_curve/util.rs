@@ -1,7 +1,7 @@
 use halo2_base::{
     gates::{GateInstructions, RangeChip, RangeInstructions},
     utils::{fe_to_biguint, BigPrimeField},
-    AssignedValue, Context,
+    AssignedValue, Context, QuantumCell,
 };
 use itertools::Itertools;
 use num_bigint::{BigUint, ToBigInt};
@@ -45,6 +45,39 @@ pub(crate) fn bits_le_to_bytes_assigned<F: BigPrimeField>(
     bits: &[AssignedValue<F>],
 ) -> Vec<AssignedValue<F>> {
     bits.chunks(8).map(|chunk| bits_le_to_byte_assigned(ctx, range, chunk)).collect_vec()
+}
+
+pub(crate) fn bytes_le_to_fe<F: BigPrimeField>(
+    ctx: &mut Context<F>,
+    range: &RangeChip<F>,
+    bytes: &[AssignedValue<F>],
+) -> AssignedValue<F> {
+    let bytes_base = (0..bytes.len())
+        .map(|i| QuantumCell::Constant(range.gate().pow_of_two()[i * 8]))
+        .collect_vec();
+    let _ = bytes.iter().map(|byte| range.range_check(ctx, *byte, 8));
+    range.gate().inner_product(ctx, bytes.to_vec(), bytes_base)
+}
+
+pub fn fe_to_bytes_le<F: BigPrimeField>(
+    ctx: &mut Context<F>,
+    range: &RangeChip<F>,
+    fe: AssignedValue<F>,
+) -> Vec<AssignedValue<F>> {
+    let bytes = fe.value().to_bytes_le();
+    let bytes_assigned = bytes
+        .iter()
+        .map(|byte| {
+            let assigned = ctx.load_witness(F::from(*byte as u64));
+            range.range_check(ctx, assigned, 8);
+            assigned
+        })
+        .collect_vec();
+    let _fe = bytes_le_to_fe(ctx, range, &bytes_assigned);
+    assert_eq!(fe.value(), _fe.value());
+    ctx.constrain_equal(&fe, &_fe);
+
+    bytes_assigned
 }
 
 pub(crate) fn limbs_le_to_bn<F: BigPrimeField>(

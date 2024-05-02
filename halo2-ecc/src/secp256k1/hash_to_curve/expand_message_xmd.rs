@@ -1,12 +1,12 @@
 use super::{
     constants::{get_dst_prime, get_lib_str, get_z_pad},
-    util::{bits_le_to_bytes_assigned, bytes_to_bits_le_assigned},
+    util::{bits_le_to_bytes_assigned, bytes_to_bits_le_assigned, fe_to_bytes_le},
 };
-use crate::secp256k1::sha256::Sha256Chip;
 use halo2_base::{
     gates::{GateInstructions, RangeChip, RangeInstructions},
+    poseidon::hasher::PoseidonHasher,
     utils::BigPrimeField,
-    AssignedValue, Context, QuantumCell,
+    AssignedValue, Context,
 };
 
 fn calc_msg_prime_output_length(msg_length: usize) -> usize {
@@ -47,19 +47,22 @@ fn msg_prime<F: BigPrimeField>(
 
 fn hash_msg_prime_to_b0<F: BigPrimeField>(
     ctx: &mut Context<F>,
-    sha256_chip: &Sha256Chip<'_, F>,
+    range: &RangeChip<F>,
+    poseidon_hasher: &PoseidonHasher<F, 3, 2>,
     msg_prime_bytes: &[AssignedValue<F>],
 ) -> Vec<AssignedValue<F>> {
-    let msg_prime_bytes = msg_prime_bytes.iter().map(|byte| QuantumCell::Existing(*byte));
-    // TODO: Have a max len for the sha hash.
-    let hash = sha256_chip.digest(ctx, msg_prime_bytes).unwrap();
-    hash
+    let len = ctx.load_witness(F::from(msg_prime_bytes.len() as u64));
+    let hash = poseidon_hasher.hash_var_len_array(ctx, range, msg_prime_bytes, len);
+    let mut hash_bytes = fe_to_bytes_le(ctx, range, hash);
+    hash_bytes.reverse();
+
+    hash_bytes
 }
 
 fn hash_bi<F: BigPrimeField>(
     ctx: &mut Context<F>,
     range: &RangeChip<F>,
-    sha256_chip: &Sha256Chip<F>,
+    poseidon_hasher: &PoseidonHasher<F, 3, 2>,
     b_idx_byte: &AssignedValue<F>,
     b0_bytes: &[AssignedValue<F>],
     bi_minus_one_bytes: &[AssignedValue<F>],
@@ -73,14 +76,15 @@ fn hash_bi<F: BigPrimeField>(
     let xor_bits = str_xor(ctx, range, &b0_bits, &bi_minus_one_bits);
     let xor_bytes = bits_le_to_bytes_assigned(ctx, range, &xor_bits);
 
-    let bi_bytes = hash_b(ctx, sha256_chip, b_idx_byte, &xor_bytes);
+    let bi_bytes = hash_b(ctx, range, poseidon_hasher, b_idx_byte, &xor_bytes);
 
     bi_bytes
 }
 
 fn hash_b<F: BigPrimeField>(
     ctx: &mut Context<F>,
-    sha256_chip: &Sha256Chip<'_, F>,
+    range: &RangeChip<F>,
+    poseidon_hasher: &PoseidonHasher<F, 3, 2>,
     b_idx_byte: &AssignedValue<F>,
     b_bytes: &[AssignedValue<F>],
 ) -> Vec<AssignedValue<F>> {
@@ -94,11 +98,12 @@ fn hash_b<F: BigPrimeField>(
     preimage.push(*b_idx_byte);
     preimage.extend(dst_prime);
 
-    let preimage = preimage.iter().map(|byte| QuantumCell::Existing(*byte));
-    // TODO: Have a max len for the sha hash.
-    let hash = sha256_chip.digest(ctx, preimage).unwrap();
+    let len = ctx.load_witness(F::from(preimage.len() as u64));
+    let hash = poseidon_hasher.hash_var_len_array(ctx, range, &preimage, len);
+    let mut hash_bytes = fe_to_bytes_le(ctx, range, hash);
+    hash_bytes.reverse();
 
-    hash
+    hash_bytes
 }
 
 fn str_xor<F: BigPrimeField>(
@@ -123,7 +128,7 @@ fn str_xor<F: BigPrimeField>(
 pub(crate) fn expand_message_xmd<F: BigPrimeField>(
     ctx: &mut Context<F>,
     range: &RangeChip<F>,
-    sha256_chip: &Sha256Chip<F>,
+    poseidon_hasher: &PoseidonHasher<F, 3, 2>,
     msg_bytes: &[AssignedValue<F>],
 ) -> Vec<AssignedValue<F>> {
     let one = ctx.load_constant(F::from(1));
@@ -131,10 +136,10 @@ pub(crate) fn expand_message_xmd<F: BigPrimeField>(
     let three = ctx.load_constant(F::from(3));
 
     let msg_prime_bytes = msg_prime(ctx, msg_bytes);
-    let b0 = hash_msg_prime_to_b0(ctx, sha256_chip, &msg_prime_bytes);
-    let b1 = hash_b(ctx, sha256_chip, &one, &b0);
-    let b2 = hash_bi(ctx, range, sha256_chip, &two, &b0, &b1);
-    let b3 = hash_bi(ctx, range, sha256_chip, &three, &b0, &b2);
+    let b0 = hash_msg_prime_to_b0(ctx, range, poseidon_hasher, &msg_prime_bytes);
+    let b1 = hash_b(ctx, range, poseidon_hasher, &one, &b0);
+    let b2 = hash_bi(ctx, range, poseidon_hasher, &two, &b0, &b1);
+    let b3 = hash_bi(ctx, range, poseidon_hasher, &three, &b0, &b2);
 
     let mut expanded_msg = [b1, b2, b3].concat();
     expanded_msg.reverse();
