@@ -1,12 +1,13 @@
 use super::{
-    constants::{get_dst_prime, get_lib_str, get_z_pad},
-    util::{bits_le_to_bytes_assigned, bytes_to_bits_le_assigned, fe_to_bytes_le},
+    constants::{ get_dst_prime, get_lib_str, get_z_pad },
+    util::{ bits_le_to_bytes_assigned, bytes_to_bits_le_assigned, fe_to_bytes_le },
 };
 use halo2_base::{
-    gates::{GateInstructions, RangeChip, RangeInstructions},
+    gates::{ GateInstructions, RangeChip, RangeInstructions },
     poseidon::hasher::PoseidonHasher,
     utils::BigPrimeField,
-    AssignedValue, Context,
+    AssignedValue,
+    Context,
 };
 
 fn calc_msg_prime_output_length(msg_length: usize) -> usize {
@@ -15,7 +16,7 @@ fn calc_msg_prime_output_length(msg_length: usize) -> usize {
 
 fn msg_prime<F: BigPrimeField>(
     ctx: &mut Context<F>,
-    msg_bytes: &[AssignedValue<F>],
+    msg_bytes: &[AssignedValue<F>]
 ) -> Vec<AssignedValue<F>> {
     let zero = ctx.load_zero();
 
@@ -49,10 +50,9 @@ fn hash_msg_prime_to_b0<F: BigPrimeField>(
     ctx: &mut Context<F>,
     range: &RangeChip<F>,
     poseidon_hasher: &PoseidonHasher<F, 3, 2>,
-    msg_prime_bytes: &[AssignedValue<F>],
+    msg_prime_bytes: &[AssignedValue<F>]
 ) -> Vec<AssignedValue<F>> {
-    let len = ctx.load_witness(F::from(msg_prime_bytes.len() as u64));
-    let hash = poseidon_hasher.hash_var_len_array(ctx, range, msg_prime_bytes, len);
+    let hash = poseidon_hasher.hash_fix_len_array(ctx, range.gate(), msg_prime_bytes);
     let mut hash_bytes = fe_to_bytes_le(ctx, range, hash);
     hash_bytes.reverse();
 
@@ -65,7 +65,7 @@ fn hash_bi<F: BigPrimeField>(
     poseidon_hasher: &PoseidonHasher<F, 3, 2>,
     b_idx_byte: &AssignedValue<F>,
     b0_bytes: &[AssignedValue<F>],
-    bi_minus_one_bytes: &[AssignedValue<F>],
+    bi_minus_one_bytes: &[AssignedValue<F>]
 ) -> Vec<AssignedValue<F>> {
     assert_eq!(b0_bytes.len(), 32);
     assert_eq!(b0_bytes.len(), bi_minus_one_bytes.len());
@@ -86,7 +86,7 @@ fn hash_b<F: BigPrimeField>(
     range: &RangeChip<F>,
     poseidon_hasher: &PoseidonHasher<F, 3, 2>,
     b_idx_byte: &AssignedValue<F>,
-    b_bytes: &[AssignedValue<F>],
+    b_bytes: &[AssignedValue<F>]
 ) -> Vec<AssignedValue<F>> {
     assert_eq!(b_bytes.len(), 32);
     assert!(b_idx_byte.value() < &F::from(8u64));
@@ -98,8 +98,7 @@ fn hash_b<F: BigPrimeField>(
     preimage.push(*b_idx_byte);
     preimage.extend(dst_prime);
 
-    let len = ctx.load_witness(F::from(preimage.len() as u64));
-    let hash = poseidon_hasher.hash_var_len_array(ctx, range, &preimage, len);
+    let hash = poseidon_hasher.hash_fix_len_array(ctx, range.gate(), &preimage);
     let mut hash_bytes = fe_to_bytes_le(ctx, range, hash);
     hash_bytes.reverse();
 
@@ -110,7 +109,7 @@ fn str_xor<F: BigPrimeField>(
     ctx: &mut Context<F>,
     range: &RangeChip<F>,
     a_bits: &[AssignedValue<F>],
-    b_bits: &[AssignedValue<F>],
+    b_bits: &[AssignedValue<F>]
 ) -> Vec<AssignedValue<F>> {
     assert_eq!(a_bits.len(), b_bits.len());
 
@@ -129,7 +128,7 @@ pub(crate) fn expand_message_xmd<F: BigPrimeField>(
     ctx: &mut Context<F>,
     range: &RangeChip<F>,
     poseidon_hasher: &PoseidonHasher<F, 3, 2>,
-    msg_bytes: &[AssignedValue<F>],
+    msg_bytes: &[AssignedValue<F>]
 ) -> Vec<AssignedValue<F>> {
     let one = ctx.load_constant(F::from(1));
     let two = ctx.load_constant(F::from(2));
