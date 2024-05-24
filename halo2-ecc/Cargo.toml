@@ -36,6 +36,8 @@ criterion-macro = "0.4"
 halo2-base = { version = "=0.4.1", path = "../halo2-base", default-features = false, features = ["test-utils"] }
 test-log = "0.2.12"
 env_logger = "0.10.0"
+k256 = { version = "0.13.3", features = ["arithmetic", "hash2curve", "expose-field", "sha2"]}
+pse-poseidon = { git = "https://github.com/shreyas-londhe/pse-poseidon.git" }
 
 [features]
 default = ["jemallocator", "halo2-axiom", "display"]
