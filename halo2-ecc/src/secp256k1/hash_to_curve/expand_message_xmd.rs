@@ -9,10 +9,6 @@ use halo2_base::{
     AssignedValue, Context,
 };
 
-fn calc_msg_prime_output_length(msg_length: usize) -> usize {
-    msg_length + 64 + 2 + 50 + 1 // msg + z_pad + lib_str + dst_prime + 0
-}
-
 fn msg_prime<F: BigPrimeField>(
     ctx: &mut Context<F>,
     msg_bytes: &[AssignedValue<F>],
@@ -22,9 +18,9 @@ fn msg_prime<F: BigPrimeField>(
     let z_pad = get_z_pad(ctx);
     let lib_str = get_lib_str(ctx);
     let dst_prime = get_dst_prime(ctx);
+    let dst_prime_len = ctx.load_witness(F::from(dst_prime.len() as u64));
 
-    let msg_prime_len = calc_msg_prime_output_length(msg_bytes.len());
-    let mut msg_prime = Vec::<AssignedValue<F>>::with_capacity(msg_prime_len);
+    let mut msg_prime = Vec::<AssignedValue<F>>::new();
 
     // msg_prme = z_pad ...
     msg_prime.extend(z_pad);
@@ -39,9 +35,11 @@ fn msg_prime<F: BigPrimeField>(
     msg_prime.push(zero);
 
     // msg_prme = z_pad || msg || lib_str || 0 || dst_prime
-    msg_prime.extend(dst_prime);
+    msg_prime.extend(dst_prime.clone());
 
-    assert_eq!(msg_prime.len(), msg_prime_len);
+    // msg_prme = z_pad || msg || lib_str || 0 || dst_prime || len(dst_prime)
+    msg_prime.push(dst_prime_len);
+
     msg_prime
 }
 
@@ -91,11 +89,13 @@ fn hash_b<F: BigPrimeField>(
     assert!(b_idx_byte.value() < &F::from(8u64));
 
     let dst_prime = get_dst_prime(ctx);
+    let dst_prime_len = ctx.load_witness(F::from(dst_prime.len() as u64));
 
     let mut preimage = Vec::<AssignedValue<F>>::new();
     preimage.extend(b_bytes);
     preimage.push(*b_idx_byte);
-    preimage.extend(dst_prime);
+    preimage.extend(dst_prime.clone());
+    preimage.push(dst_prime_len);
 
     let hash = poseidon_hasher.hash_fix_len_array(ctx, range.gate(), &preimage);
     let mut hash_bytes = fe_to_bytes_le(ctx, range, hash);

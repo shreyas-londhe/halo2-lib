@@ -75,7 +75,7 @@ mod test {
         let message = "hello world";
         let pt = Secp256k1::hash_from_bytes::<ExpandMsgXmd<Poseidon<Fr, 3, 2>>>(
             &[message.as_bytes()],
-            &[b"QUUX-V01-CS02-with-secp256k1_XMD:SHA-256_SSWU_RO_"],
+            &[b"QUUX-V01-CS02-with-secp256k1_XMD:POSEIDON_SSWU_RO_"],
         )
         .unwrap()
         .to_affine();
